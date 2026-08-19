@@ -1,0 +1,132 @@
+site_name: open-fsm
+site_description: >-
+  A generic, ORM-agnostic finite state machine for Python — the declarative
+  django-fsm API as a standalone core. Works with Django, SQLAlchemy, Tortoise
+  or plain objects.
+site_author: Open Byte
+site_url: https://open-byte.github.io/open-fsm/
+site_dir: site
+
+repo_name: open-byte/open-fsm
+repo_url: https://github.com/open-byte/open-fsm
+edit_uri: edit/main/docs/
+
+copyright: Copyright &copy; 2026 Open Byte
+
+theme:
+  name: material
+  language: en
+  font:
+    text: Fira Sans
+    code: Fira Code
+  icon:
+    logo: material/state-machine
+    repo: fontawesome/brands/github
+  palette:
+    - scheme: slate
+      primary: indigo
+      accent: amber
+      toggle:
+        icon: material/weather-night
+        name: Switch to light mode
+    - scheme: default
+      primary: indigo
+      accent: amber
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark mode
+  features:
+    - content.action.edit
+    - content.code.annotate
+    - content.code.copy
+    - content.tabs.link
+    - navigation.indexes
+    - navigation.sections
+    - navigation.tabs
+    - navigation.top
+    - navigation.tracking
+    - search.highlight
+    - search.suggest
+    - toc.follow
+
+# conftest.py lives in docs/ so pytest can execute the examples on each page.
+exclude_docs: |
+  conftest.py
+
+plugins:
+  - search
+  # Generates the Open Graph / Twitter card image and tags. Needs the imaging
+  # extra and cairo/pango; set CARDS=false to skip it on a slow local build.
+  - social:
+      cards: !ENV [CARDS, true]
+      cards_layout_options:
+        background_color: '#0d1420'
+        color: '#e8edf5'
+
+# Promoted from INFO so `mkdocs build --strict` fails on a broken cross-reference.
+validation:
+  links:
+    absolute_links: warn
+    unrecognized_links: warn
+    anchors: warn
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      toc_depth: 3
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      base_path:
+        - '.'
+      check_paths: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+extra_css:
+  - stylesheets/extra.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/open-byte
+      name: Open Byte on GitHub
+
+nav:
+  - Home: index.md
+  - Overview: overview.md
+  - Getting Started: getting-started.md
+  - Guides:
+      - The State field: guides/state-field.md
+      - Dataclasses: guides/dataclasses.md
+      - Transitions: guides/transitions.md
+      - Conditions: guides/conditions.md
+      - Dynamic targets: guides/dynamic-targets.md
+      - Introspection: guides/introspection.md
+      - Inheritance: guides/inheritance.md
+      - Binding state to storage: guides/persistence.md
+  - Integrations:
+      - Django ORM: integrations/django.md
+      - Tortoise ORM: integrations/tortoise.md
+      - SQLAlchemy: integrations/sqlalchemy.md
+  - Reference:
+      - State: reference/state.md
+      - Transitions: reference/transitions.md
+      - Engine: reference/engine.md
+      - Errors: reference/errors.md
+  - Project:
+      - How These Docs Are Tested: project/testing.md
+      - Credits and Attribution: project/credits.md
+      - Publishing: project/publishing.md
