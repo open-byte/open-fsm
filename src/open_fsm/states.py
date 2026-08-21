@@ -11,7 +11,7 @@ from typing_extensions import Self
 from open_fsm.exceptions import TransitionNotAllowed
 from open_fsm.transitions import Transition
 
-from .typing import DictStrAny, StateValue
+from .typing import DictStrAny, Instance, StateValue
 
 
 class StateEnum(str, Enum):
@@ -110,6 +110,7 @@ class StateField:
         self._internal_value = default
         self._name: str | None = None
         self._on_success_callbacks: list[Callable[..., Any]] | None = None
+        self._on_failure_callbacks: list[Callable[..., Any]] | None = None
 
     # def __set_name__(self, instance_type: type[object], name: str) -> None:
     #     print(f'Setting name for StateField: {name}')
@@ -154,6 +155,14 @@ class StateField:
             exception_state = method_meta.exception_state(curren_state)
             if exception_state is not None:
                 self._internal_value = exception_state
+
+            transition = method_meta.get_transition(curren_state)
+            if transition is not None and transition.on_error_callback is not None:
+                transition.on_error_callback(instance, e)
+
+            if self._on_failure_callbacks is not None:
+                for callback in self._on_failure_callbacks:
+                    callback(instance, *args, **kwargs)
             raise e
 
         else:
@@ -168,7 +177,8 @@ class StateField:
         self,
         source: StateValue | Iterable[StateValue],
         target: StateValue,
-        on_error: StateValue | Callable[..., None] = None,
+        on_error: StateValue = None,
+        on_error_callback: Callable[[Instance, Exception], None] | None = None,
         conditions: Iterable[Callable[..., bool]] | Callable[..., bool] | None = None,
         label: str | None = None,
         properties: DictStrAny | None = None,
@@ -211,6 +221,7 @@ class StateField:
                         source=_source,
                         target=target,
                         on_error=on_error,
+                        on_error_callback=on_error_callback,
                         conditions=normalized_conditions,
                         label=label,
                         properties=properties,
@@ -226,6 +237,15 @@ class StateField:
             if self._on_success_callbacks is None:
                 self._on_success_callbacks = []
             self._on_success_callbacks.append(func)
+            return func
+
+        return wrapper
+
+    def on_failure(self) -> Callable[..., Any]:
+        def wrapper(func: Callable[..., Any]) -> Callable[..., Any]:
+            if self._on_failure_callbacks is None:
+                self._on_failure_callbacks = []
+            self._on_failure_callbacks.append(func)
             return func
 
         return wrapper

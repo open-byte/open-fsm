@@ -10,7 +10,8 @@ class Transition:
     method: Callable[..., Any]
     source: StateValue
     target: StateValue
-    on_error: StateValue | Callable[..., None] = None
+    on_error: StateValue = None
+    on_error_callback: Callable[[object, Exception], None] | None = None
     conditions: Iterable[Callable[..., bool]] | None = None
     label: str | None = None
     properties: DictStrAny | None = None
