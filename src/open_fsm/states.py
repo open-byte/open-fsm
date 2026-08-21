@@ -129,10 +129,36 @@ class StateField:
 
     def _change_state(self, instance: object, method: Callable[..., Any], *args: Any, **kwargs: Any) -> None:
 
-        method_meta = getattr(method, INTERNAL_OPEN_FSM_STATE_FIELD, None)
+        method_meta: MethodMeta | None = getattr(method, INTERNAL_OPEN_FSM_STATE_FIELD, None)
+        curren_state = self._internal_value
         if method_meta is None:
             raise ValueError(f"No transition metadata found for method '{method.__name__}'.")  # ty: ignore[unresolved-attribute]
-        raise NotImplementedError('The _change_state method is not implemented yet.')
+
+        if not method_meta.has_transition(curren_state):
+            raise TransitionNotAllowed(
+                f"Cannot transition from state '{curren_state}' using method '{method.__name__}'."  # ty: ignore[unresolved-attribute]
+            )
+
+        if not method_meta.conditions_met(instance, curren_state):
+            raise TransitionNotAllowed(
+                f"Conditions not met for transitioning from state '{curren_state}' using method '{method.__name__}'."  # ty: ignore[unresolved-attribute]
+            )
+
+        next_state = method_meta.next_state(curren_state)
+
+        try:
+            result = method(instance, *args, **kwargs)
+            ## Try to get_states
+
+        except Exception as e:
+            exception_state = method_meta.exception_state(curren_state)
+            if exception_state is not None:
+                self._internal_value = exception_state
+            raise e
+
+        else:
+            self._internal_value = next_state
+        return result
 
     def transition(
         self,
