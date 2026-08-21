@@ -106,10 +106,10 @@ class MethodMeta:
 
 class StateField:
     def __init__(self, *, states: Any, default: StateValue = None) -> None:
-        print(f'Initializing StateField with states: {states} and default: {default}')
         self.states = states
         self._internal_value = default
         self._name: str | None = None
+        self._on_success_callbacks: list[Callable[..., Any]] | None = None
 
     # def __set_name__(self, instance_type: type[object], name: str) -> None:
     #     print(f'Setting name for StateField: {name}')
@@ -158,6 +158,10 @@ class StateField:
 
         else:
             self._internal_value = next_state
+            if self._on_success_callbacks is not None:
+                for callback in self._on_success_callbacks:
+                    callback(instance, *args, **kwargs)
+
         return result
 
     def transition(
@@ -214,5 +218,14 @@ class StateField:
                 )
 
             return result
+
+        return wrapper
+
+    def on_success(self) -> Callable[..., Any]:
+        def wrapper(func: Callable[..., Any]) -> Callable[..., Any]:
+            if self._on_success_callbacks is None:
+                self._on_success_callbacks = []
+            self._on_success_callbacks.append(func)
+            return func
 
         return wrapper
