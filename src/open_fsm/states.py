@@ -1,13 +1,119 @@
+from __future__ import annotations
+
 from collections.abc import Callable, Iterable
+from dataclasses import dataclass
+from enum import Enum
+from functools import wraps
 from typing import Any
+
+from typing_extensions import Self
+
+from open_fsm.exceptions import TransitionNotAllowed
+from open_fsm.transitions import Transition
 
 from .typing import DictStrAny, StateValue
 
 
+class StateEnum(str, Enum):
+    """
+    A base class for state enumerations.
+    This class can be used to define a set of valid states for a state machine.
+    STATES:
+        Any: Represents any state. This can be used as a wildcard to match any state.
+        PLUS: Represents a special state that can be used to indicate a transition to any state except itself.
+        Example usage:
+        class MyStates(StateEnum):
+            INITIAL = "initial"
+            FINISHED = "finished"
+        In this example, MyStates is a subclass of StateEnum that defines two valid states:
+        INITIAL and FINISHED. You can use these states in your state machine to represent the current
+        state of the system. The ANY and PLUS states can be used as wildcards in transition definitions.
+
+    """
+
+    ANY = '*'
+    PLUS = '+'
+
+
+INTERNAL_OPEN_FSM_STATE_FIELD = '_open_fsm_state_field'
+
+
+@dataclass
+class MethodMeta:
+    transitions: dict[StateValue, Transition]
+    state_field: StateField | None = None
+
+    def get_transition(self, source: StateValue) -> Transition | None:
+        transition = self.transitions.get(source, None)
+        if transition is None:
+            transition = self.transitions.get(StateEnum.ANY.value, None)
+        if transition is None:
+            transition = self.transitions.get(StateEnum.PLUS.value, None)
+        return transition
+
+    def has_transition(self, source: StateValue) -> bool:
+        if source in self.transitions:
+            return True
+        if StateEnum.ANY.value in self.transitions:
+            return True
+        if StateEnum.PLUS.value in self.transitions and self.transitions[StateEnum.PLUS.value].source != source:
+            return True
+        return False
+
+    def conditions_met(self, instance: object, state: StateValue) -> bool:
+        """
+        Check if all conditions have been met
+        """
+        transition = self.get_transition(state)
+
+        if transition is None:
+            return False
+
+        elif transition.conditions is None:
+            return True
+        else:
+            return all(condition(instance) for condition in transition.conditions)
+
+    def next_state(self, current_state: StateValue) -> StateValue:
+        transition = self.get_transition(current_state)
+
+        if transition is None:
+            raise TransitionNotAllowed(f'No transition from {current_state}')
+
+        return transition.target
+
+    def exception_state(self, current_state: StateValue) -> StateValue:
+        transition = self.get_transition(current_state)
+
+        if transition is None:
+            raise TransitionNotAllowed(f'No transition from {current_state}')
+
+        return transition.on_error
+
+    def get_transition_from_source(self, source: StateValue) -> Transition | None:
+        transition = self.transitions.get(source)
+        if transition and transition.source == source:
+            return transition
+        return None
+
+    def add_transition(self, transition: Transition) -> None:
+
+        if transition.source in self.transitions:
+            raise ValueError(f"A transition from source '{transition.source}' already exists.")
+
+        self.transitions[transition.source] = transition
+
+
 class StateField:
     def __init__(self, *, states: Any, default: StateValue = None) -> None:
+        print(f'Initializing StateField with states: {states} and default: {default}')
         self.states = states
         self._internal_value = default
+        self._name: str | None = None
+
+    # def __set_name__(self, instance_type: type[object], name: str) -> None:
+    #     print(f'Setting name for StateField: {name}')
+    #     self._name = name
 
     def __get__(self, instance: object, instance_type: type[object]) -> StateValue:
         if instance is None:
@@ -21,21 +127,66 @@ class StateField:
         # if List, tuple, set, etc. check if value is in self.states
         self._internal_value = value
 
+    def _change_state(self, instance: object, method: Callable[..., Any], *args: Any, **kwargs: Any) -> None:
+
+        method_meta = getattr(method, INTERNAL_OPEN_FSM_STATE_FIELD, None)
+        if method_meta is None:
+            raise ValueError(f"No transition metadata found for method '{method.__name__}'.")  # ty: ignore[unresolved-attribute]
+        raise NotImplementedError('The _change_state method is not implemented yet.')
+
     def transition(
         self,
-        source: StateValue,
-        target: Iterable[StateValue] | StateValue,
+        source: StateValue | Iterable[StateValue],
+        target: StateValue,
         on_error: StateValue | Callable[..., None] = None,
         conditions: Iterable[Callable[..., bool]] | Callable[..., bool] | None = None,
         label: str | None = None,
         properties: DictStrAny | None = None,
-    ) -> Any:
-        # TODO: Missing validation logic for source and target states
-
+    ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         def wrapper(func: Callable[..., Any]) -> Callable[..., Any]:
-            def inner(*args: Any, **kwargs: Any) -> Any:
-                print(f'Transitioning from {source} to {target}')
 
-            return inner
+            method_meta = getattr(func, INTERNAL_OPEN_FSM_STATE_FIELD, None)
+
+            if method_meta is None:
+                method_meta = MethodMeta(
+                    transitions={},
+                    state_field=self,
+                )
+                setattr(func, INTERNAL_OPEN_FSM_STATE_FIELD, method_meta)
+
+                @wraps(func)
+                def inner(instance: Self, *args: Any, **kwargs: Any) -> Any:
+                    return self._change_state(instance, func, *args, **kwargs)
+
+                result = inner
+            else:
+                result = func
+
+            sources = source if isinstance(source, (list, tuple, set)) else (source,)
+
+            normalized_conditions: tuple[Callable[..., bool], ...] | None = None
+
+            if conditions is not None:
+                if isinstance(conditions, Callable):
+                    normalized_conditions = (conditions,)
+                elif isinstance(conditions, Iterable):
+                    normalized_conditions = tuple(conditions)
+                else:
+                    raise ValueError('Conditions must be a callable or an iterable of callables.')
+
+            for _source in sources:
+                method_meta.add_transition(
+                    Transition(
+                        method=func,
+                        source=_source,
+                        target=target,
+                        on_error=on_error,
+                        conditions=normalized_conditions,
+                        label=label,
+                        properties=properties,
+                    )
+                )
+
+            return result
 
         return wrapper
